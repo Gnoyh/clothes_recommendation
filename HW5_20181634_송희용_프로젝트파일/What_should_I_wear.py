@@ -8,8 +8,10 @@ import datetime
 
 import random
 
+from abc import ABC, abstractmethod
 
-def connetion():
+
+def connection():
     try:
         connection = sqlite3.connect("Clothes.db", isolation_level = "")
         return connection
@@ -17,61 +19,98 @@ def connetion():
         print(Error)
 
 
-def readData():
-    cursor = connection.cursor()
+class Database(ABC):
+    @abstractmethod
+    def readData(self):
+        pass
 
-    cursor.execute("SELECT * FROM clothes_list")
+    @abstractmethod
+    def insertData(self, data):
+        pass
 
-    data = cursor.fetchall()
-    list = []
+    @abstractmethod
+    def deleteData(self, id):
+        pass
 
-    for i in data:
-        list.append(i)
-
-    return list
-
-
-def insertData(data):
-    cursor = connection.cursor()
-
-    cursor.execute("INSERT INTO clothes_list (id, name, type, detailtype, color, latestdate) VALUES (?, ?, ?, ?, ?, ?)", data)
-
-    connection.commit()
-
-    tree.insert("", "end", text="-", values=(data[0], data[1], data[5]))
-    tree.yview_moveto(1.0)
-
-    text.insert(tk.END, "\n옷 추가 서비스를 완료했습니다!\n")
-    text.see(tk.END)
+    @abstractmethod
+    def updateData(self, latestdate, id):
+        pass
 
 
-def deleteData(id):
-    cursor = connection.cursor()
+class RealDatabase(Database):
+    def readData(self):
+        cursor = connection.cursor()
 
-    cursor.execute("DELETE FROM clothes_list WHERE id = '%s'" %id)
+        cursor.execute("SELECT * FROM clothes_list")
 
-    connection.commit()
+        data = cursor.fetchall()
+        list = []
 
-    text.insert(tk.END, "\n============================================================\n"
-                        "\n옷 삭제 서비스를 완료했습니다!\n")
-    text.see(tk.END)
+        for i in data:
+            list.append(i)
+
+        return list
+
+    def insertData(self, data):
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "INSERT INTO clothes_list (id, name, type, detailtype, color, latestdate) VALUES (?, ?, ?, ?, ?, ?)", data)
+
+        connection.commit()
+
+        tree.insert("", "end", text="-", values=(data[0], data[1], data[5]))
+        tree.yview_moveto(1.0)
+
+        text.insert(tk.END, "\n옷 추가 서비스를 완료했습니다!\n")
+        text.see(tk.END)
+
+    def deleteData(self, id):
+        cursor = connection.cursor()
+
+        cursor.execute("DELETE FROM clothes_list WHERE id = '%s'" % id)
+
+        connection.commit()
+
+        text.insert(tk.END, "\n============================================================\n"
+                            "\n옷 삭제 서비스를 완료했습니다!\n")
+        text.see(tk.END)
+
+    def updateData(self, latestdate, id):
+        cursor = connection.cursor()
+
+        cursor.execute("UPDATE clothes_list SET latestdate = '%s' WHERE id = '%s'" % (latestdate, id))
+
+        connection.commit()
+
+        tree.delete(*tree.get_children())
+        tree.yview_moveto(1.0)
+
+        showTree()
 
 
-def updateData(latestdate, id):
-    cursor = connection.cursor()
+class DatabaseProxy(Database):
+    def __init__(self):
+        self.realDatabase = RealDatabase()
 
-    cursor.execute("UPDATE clothes_list SET latestdate = '%s' WHERE id = '%s'" %(latestdate, id))
+    def readData(self):
+        return self.realDatabase.readData()
 
-    connection.commit()
+    def insertData(self, data):
+        return self.realDatabase.insertData(data)
 
-    tree.delete(*tree.get_children())
-    tree.yview_moveto(1.0)
+    def deleteData(self, id):
+        return self.realDatabase.deleteData(id)
 
-    showTree()
+    def updateData(self, latestdate, id):
+        return self.realDatabase.updateData(latestdate, id)
+
+
+database = DatabaseProxy()
 
 
 def showTree():
-    list = readData()
+    list = database.readData()
 
     for i in range(len(list)):
         tree.insert("", "end", text="-", values=(list[i][0], list[i][1], list[i][5]))
@@ -137,7 +176,7 @@ def recommendClothes():
 
 
     def findOuter(temp):
-        list = readData()
+        list = database.readData()
 
         randomClothesList.clear()
         randomCheckList.clear()
@@ -170,7 +209,7 @@ def recommendClothes():
 
 
     def findTops(temp, color=None):
-        list = readData()
+        list = database.readData()
 
         if color is None:
             randomClothesList.clear()
@@ -234,7 +273,7 @@ def recommendClothes():
 
 
     def findBottoms(temp, color1, color2=None):
-        list = readData()
+        list = database.readData()
 
         if color2 is None:
             randomCheckList.clear()
@@ -322,7 +361,7 @@ def recommendClothes():
         text.see(tk.END)
 
         for clothes in randomClothesList:
-            updateData(datetime.date.today(), clothes[1])
+            database.updateData(datetime.date.today(), clothes[1])
 
 
     recommendClothesStart()
@@ -436,7 +475,7 @@ def inputClothes():
         newName = "%s %s" % (
         findKey(clothesColorList, dataList[4]), findKey(clothesDetailTypeList[dataList[2]], dataList[3]))
 
-        insertData((newId, newName, dataList[2], dataList[3], dataList[4], "-"))
+        database.insertData((newId, newName, dataList[2], dataList[3], dataList[4], "-"))
 
 
     inputClothesStart()
@@ -448,7 +487,7 @@ def deleteClothes():
     if focusedItem:
         id = tree.item(focusedItem)["values"][0]
 
-        deleteData(id)
+        database.deleteData(id)
     else:
         text.insert(tk.END, "\n삭제할 옷을 선택해주세요!\n")
         text.see(tk.END)
@@ -474,7 +513,7 @@ def findKey(dic, value):
     return None
 
 
-connection = connetion()
+connection = connection()
 window = tk.Tk()
 
 deleteButtonList = []
